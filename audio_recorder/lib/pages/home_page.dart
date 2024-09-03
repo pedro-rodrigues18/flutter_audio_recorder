@@ -20,6 +20,22 @@ class _HomePageState extends State<HomePage> {
   String? recordingPath;
 
   @override
+  void initState() {
+    super.initState();
+    audioPlayer.playerStateStream.listen((state) {
+      setState(() {
+        isPlaying = state.playing;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    audioPlayer.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -39,31 +55,64 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          if (recordingPath != null)
-            MaterialButton(
-              onPressed: () async {
-                if (audioPlayer.playing) {
-                  audioPlayer.stop();
-                  setState(() {
-                    isPlaying = false;
-                  });
-                } else {
-                  await audioPlayer.setFilePath(recordingPath!);
-                  await audioPlayer.play();
-                  setState(() {
-                    isPlaying = true;
-                  });
-                }
-              },
-              color: Theme.of(context).colorScheme.primary,
-              child: Text(
-                isPlaying ? 'Parar' : 'Reproduzir',
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
+          if (recordingPath != null) _audioPlayerWidget(),
           if (recordingPath == null) const Text('Nenhuma gravação encontrada'),
         ],
       ),
+    );
+  }
+
+  Widget _audioPlayerWidget() {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
+              onPressed: () async {
+                if (isPlaying) {
+                  await audioPlayer.pause();
+                } else {
+                  await audioPlayer.setFilePath(recordingPath!);
+                  await audioPlayer.play();
+                }
+              },
+            ),
+            Expanded(
+              child: StreamBuilder<Duration>(
+                stream: audioPlayer.positionStream,
+                builder: (context, snapshot) {
+                  final position = snapshot.data ?? Duration.zero;
+                  final duration = audioPlayer.duration ?? Duration.zero;
+                  return Column(
+                    children: [
+                      Slider(
+                        value: position.inSeconds.toDouble(),
+                        min: 0,
+                        max: duration.inSeconds.toDouble(),
+                        onChanged: (value) {
+                          audioPlayer.seek(Duration(seconds: value.toInt()));
+                        },
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(formatDuration(position)),
+                            Text(formatDuration(duration)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -99,5 +148,11 @@ class _HomePageState extends State<HomePage> {
         isRecording ? Icons.stop : Icons.mic,
       ),
     );
+  }
+
+  String formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.toString().padLeft(2, '0');
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 }
